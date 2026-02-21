@@ -1,3 +1,4 @@
+# v2 — cache bust for new bats toolchain
 name: check
 
 on:
@@ -39,5 +40,5 @@ jobs:
       - name: bats check
         run: |
           git clone https://github.com/bats-lang/repository-prototype.git ~/repository
-          ~/bats-toolchain/target/release/bats lock --repository ~/repository
+          ~/bats-toolchain/target/release/bats lock --dev --repository ~/repository
           ~/bats-toolchain/target/release/bats check --repository ~/repository
