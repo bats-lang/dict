@@ -5,6 +5,7 @@
 
 #use array as A
 #use arith as AR
+#use result as R
 
 (* ============================================================
    Types
@@ -67,7 +68,7 @@ dict_freeze(d: dict(k, v)): frozen_dict(k, v)
 dict_thaw(d: frozen_dict(k, v)): dict(k, v)
 
 #pub fun{k:t@ype}{v:t@ype}
-find(d: !frozen_dict(k, v), key: k): int
+find(d: !frozen_dict(k, v), key: k): $R.option(int)
 
 #pub fn{k:t@ype}{v:t@ype}
 get_key(d: !frozen_dict(k, v), idx: int): k
@@ -278,9 +279,12 @@ find(d, key) = let
   val+ @fdict_mk(indices, keys, _, _, hashes, _, cap, hash_fn, eq_fn) = d
   val h = hash_fn(key)
   val start = _start_slot(h, cap)
-  val result = _probe<k><v>(indices, keys, hashes, eq_fn, key, h, cap, start, cap)
+  val idx = _probe<k><v>(indices, keys, hashes, eq_fn, key, h, cap, start, cap)
   prval () = fold@(d)
-in result end
+in
+  if idx >= 0 then $R.some(idx)
+  else $R.none()
+end
 
 (* get_key: read from keys array (still mutable in frozen_dict) *)
 implement{k}{v}
@@ -336,8 +340,10 @@ fn _test_insert_find(): void = let
   val () = insert<int><int>(d, 42, 100)
   val () = insert<int><int>(d, 7, 200)
   val fd = dict_freeze<int><int>(d)
-  val idx = find<int><int>(fd, 42)
-  val v0 = get_val<int><int>(fd, idx)
+  val opt = find<int><int>(fd, 42)
+  val () = case+ opt of
+    | ~$R.some(idx) => let val v0 = get_val<int><int>(fd, idx) in () end
+    | ~$R.none() => ()
   val d = dict_thaw<int><int>(fd)
   val () = dict_free<int><int>(d)
 in () end
