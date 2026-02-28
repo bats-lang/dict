@@ -99,7 +99,7 @@ fun{k:t@ype}{v:t@ype} _probe
   in
     if idx = ~1 then ~1
     else if idx = ~2 then let
-      val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+      val next = $AR.mod_int_int(s + 1, n)
     in _probe<k><v>(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
     else let
       val idx1 = $AR.checked_idx(idx, n)
@@ -107,10 +107,10 @@ fun{k:t@ype}{v:t@ype} _probe
       if $A.get<int>(hashes, idx1) = h then
         (if eq_fn($A.get<k>(keys, idx1), key) then idx
          else let
-           val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+           val next = $AR.mod_int_int(s + 1, n)
          in _probe<k><v>(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end)
       else let
-        val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+        val next = $AR.mod_int_int(s + 1, n)
       in _probe<k><v>(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
     end
   end
@@ -127,7 +127,7 @@ fun{k:t@ype} _find_slot
     if idx = ~1 then slot
     else if idx = ~2 then slot
     else let
-      val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+      val next = $AR.mod_int_int(s + 1, n)
     in _find_slot<k>(indices, n, next, fuel - 1) end
   end
 
@@ -212,7 +212,7 @@ remove(d, key) = let
     in
       if idx = ~1 then ~1
       else if idx = ~2 then let
-        val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+        val next = $AR.mod_int_int(s + 1, n)
       in find_rm(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
       else let
         val idx1 = $AR.checked_idx(idx, n)
@@ -220,10 +220,10 @@ remove(d, key) = let
         if $A.get<int>(hashes, idx1) = h then
           (if eq_fn($A.get<k>(keys, idx1), key) then slot
            else let
-             val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+             val next = $AR.mod_int_int(s + 1, n)
            in find_rm(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end)
         else let
-          val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+          val next = $AR.mod_int_int(s + 1, n)
         in find_rm(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
       end
     end
