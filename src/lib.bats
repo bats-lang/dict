@@ -93,26 +93,25 @@ fun{k:t@ype}{v:t@ype} _probe
    key: k, h: int, n: int n,
    slot: int, fuel: int fuel): int =
   if fuel <= 0 then ~1
-  else let val s = g1ofg0(slot) in
-    if s < 0 then ~1
-    else if s >= n then ~1
-    else let val idx = $A.get<int>(indices, s) in
-      if idx = ~1 then ~1
-      else if idx = ~2 then let
+  else let
+    val s = $AR.checked_idx(slot, n)
+    val idx = $A.get<int>(indices, s)
+  in
+    if idx = ~1 then ~1
+    else if idx = ~2 then let
+      val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+    in _probe<k><v>(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
+    else let
+      val idx1 = $AR.checked_idx(idx, n)
+    in
+      if $A.get<int>(hashes, idx1) = h then
+        (if eq_fn($A.get<k>(keys, idx1), key) then idx
+         else let
+           val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+         in _probe<k><v>(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end)
+      else let
         val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
       in _probe<k><v>(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
-      else let val idx1 = g1ofg0(idx) in
-        if idx1 < 0 then ~1
-        else if idx1 >= n then ~1
-        else if $A.get<int>(hashes, idx1) = h then
-          (if eq_fn($A.get<k>(keys, idx1), key) then idx
-           else let
-             val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
-           in _probe<k><v>(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end)
-        else let
-          val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
-        in _probe<k><v>(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
-      end
     end
   end
 
@@ -121,16 +120,15 @@ fun{k:t@ype} _find_slot
   (indices: !$A.arr(int, li, n), n: int n,
    slot: int, fuel: int fuel): int =
   if fuel <= 0 then 0
-  else let val s = g1ofg0(slot) in
-    if s < 0 then 0
-    else if s >= n then 0
-    else let val idx = $A.get<int>(indices, s) in
-      if idx = ~1 then slot
-      else if idx = ~2 then slot
-      else let
-        val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
-      in _find_slot<k>(indices, n, next, fuel - 1) end
-    end
+  else let
+    val s = $AR.checked_idx(slot, n)
+    val idx = $A.get<int>(indices, s)
+  in
+    if idx = ~1 then slot
+    else if idx = ~2 then slot
+    else let
+      val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+    in _find_slot<k>(indices, n, next, fuel - 1) end
   end
 
 fn _start_slot {n:pos} (h: int, n: int n): int = let
@@ -180,37 +178,21 @@ insert(d, key, value) = let
   val existing = _probe<k><v>(indices, keys, hashes, eq_fn, key, h, cap, start, cap)
 in
   if existing >= 0 then let
-    val ei = g1ofg0(existing)
-  in
-    if ei >= 0 then
-      if ei < cap then let
-        val () = $A.set<v>(vals, ei, value)
-        prval () = fold@(d)
-      in end
-      else let prval () = fold@(d) in end
-    else let prval () = fold@(d) in end
-  end
+    val ei = $AR.checked_idx(existing, cap)
+    val () = $A.set<v>(vals, ei, value)
+    prval () = fold@(d)
+  in end
   else let
     val slot = _find_slot<k>(indices, cap, start, cap)
-    val s1 = g1ofg0(slot)
-    val ei = g1ofg0(count)
-  in
-    if s1 >= 0 then
-      if s1 < cap then
-        if ei >= 0 then
-          if ei < cap then let
-            val () = $A.set<k>(keys, ei, key)
-            val () = $A.set<v>(vals, ei, value)
-            val () = $A.set<int>(hashes, ei, h)
-            val () = $A.set<int>(indices, s1, count)
-            val () = count := count + 1
-            prval () = fold@(d)
-          in end
-          else let prval () = fold@(d) in end
-        else let prval () = fold@(d) in end
-      else let prval () = fold@(d) in end
-    else let prval () = fold@(d) in end
-  end
+    val s1 = $AR.checked_idx(slot, cap)
+    val ei = $AR.checked_idx(count, cap)
+    val () = $A.set<k>(keys, ei, key)
+    val () = $A.set<v>(vals, ei, value)
+    val () = $A.set<int>(hashes, ei, h)
+    val () = $A.set<int>(indices, s1, count)
+    val () = count := count + 1
+    prval () = fold@(d)
+  in end
 end
 
 implement{k}{v}
@@ -224,37 +206,34 @@ remove(d, key) = let
      hashes: !$A.arr(int, lh, n), eq_fn: (k, k) -<cloref1> bool,
      key: k, h: int, n: int n, slot: int, fuel: int fuel): int =
     if fuel <= 0 then ~1
-    else let val s = g1ofg0(slot) in
-      if s < 0 then ~1
-      else if s >= n then ~1
-      else let val idx = $A.get<int>(indices, s) in
-        if idx = ~1 then ~1
-        else if idx = ~2 then let
+    else let
+      val s = $AR.checked_idx(slot, n)
+      val idx = $A.get<int>(indices, s)
+    in
+      if idx = ~1 then ~1
+      else if idx = ~2 then let
+        val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+      in find_rm(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
+      else let
+        val idx1 = $AR.checked_idx(idx, n)
+      in
+        if $A.get<int>(hashes, idx1) = h then
+          (if eq_fn($A.get<k>(keys, idx1), key) then slot
+           else let
+             val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
+           in find_rm(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end)
+        else let
           val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
         in find_rm(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
-        else let val idx1 = g1ofg0(idx) in
-          if idx1 < 0 then ~1
-          else if idx1 >= n then ~1
-          else if $A.get<int>(hashes, idx1) = h then
-            (if eq_fn($A.get<k>(keys, idx1), key) then slot
-             else let
-               val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
-             in find_rm(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end)
-          else let
-            val next = (if s + 1 >= n then 0 else g0ofg1(s + 1)): int
-          in find_rm(indices, keys, hashes, eq_fn, key, h, n, next, fuel - 1) end
-        end
       end
     end
   val found = find_rm(indices, keys, hashes, eq_fn, key, h, cap, start, cap)
-  val fs = g1ofg0(found)
 in
-  if fs >= 0 then
-    if fs < cap then let
-      val () = $A.set<int>(indices, fs, ~2)
-      prval () = fold@(d)
-    in true end
-    else let prval () = fold@(d) in false end
+  if found >= 0 then let
+    val fs = $AR.checked_idx(found, cap)
+    val () = $A.set<int>(indices, fs, ~2)
+    prval () = fold@(d)
+  in true end
   else let prval () = fold@(d) in false end
 end
 
@@ -290,10 +269,8 @@ end
 implement{k}{v}
 get_key(d, idx) = let
   val+ @fdict_mk(_, keys, _, _, _, _, cap, _, _) = d
-  val idx1 = g1ofg0(idx)
-  val k0 = (if idx1 >= 0 then
-    (if idx1 < cap then $A.get<k>(keys, idx1) else $A.get<k>(keys, 0))
-  else $A.get<k>(keys, 0)): k
+  val idx1 = $AR.checked_idx(idx, cap)
+  val k0 = $A.get<k>(keys, idx1)
   prval () = fold@(d)
 in k0 end
 
@@ -301,10 +278,8 @@ in k0 end
 implement{k}{v}
 get_val(d, idx) = let
   val+ @fdict_mk(_, _, _, bv, _, _, cap, _, _) = d
-  val idx1 = g1ofg0(idx)
-  val v0 = (if idx1 >= 0 then
-    (if idx1 < cap then $A.read<v>(bv, idx1) else $A.read<v>(bv, 0))
-  else $A.read<v>(bv, 0)): v
+  val idx1 = $AR.checked_idx(idx, cap)
+  val v0 = $A.read<v>(bv, idx1)
   prval () = fold@(d)
 in v0 end
 
