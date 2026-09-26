@@ -1,0 +1,8 @@
+[package]
+name = "dict-api"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"result" = ""
+"dict" = ""
