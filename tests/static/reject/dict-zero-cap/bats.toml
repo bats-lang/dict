@@ -1,0 +1,8 @@
+[package]
+name = "dict-zero-cap"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"result" = ""
+"dict" = ""

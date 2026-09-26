@@ -1,0 +1,8 @@
+[package]
+name = "dict_ops"
+kind = "bin"
+
+[dependencies]
+"array" = ""
+"result" = ""
+"dict" = ""
