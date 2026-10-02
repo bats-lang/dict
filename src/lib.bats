@@ -12,18 +12,21 @@
    Types
    ============================================================ *)
 
-(* Slot states. Keys, values and hashes live in the slot the probe
-   chose, so no stored value is ever used as an index: every index is a
-   probe position, proven < n by construction. *)
-#define EMPTY 0
-#define USED 1
-#define REMOVED 2
+(* A slot's state: never used (a probe ends there), holding an entry,
+   or held one that was removed (a probe goes on past it). Keys, values
+   and hashes live in the slot the probe chose, so no stored value is
+   ever used as an index: every index is a probe position, proven < n by
+   construction. *)
+#pub datatype slot_state =
+  | Empty
+  | Used
+  | Removed
 
 (* c <= n live entries. *)
 #pub datavtype dict(k:t@ype, v:t@ype) =
   | {ls:agz}{lk:agz}{lv:agz}{lh:agz}{n:pos | n <= 65536}{c:nat | c <= n}
     dict_mk(k, v) of (
-      $A.arr(int, ls, n),
+      $A.arr(byte, ls, n),
       $A.arr(k, lk, n),
       $A.arr(v, lv, n),
       $A.arr(int, lh, n),
@@ -35,7 +38,7 @@
 #pub datavtype frozen_dict(k:t@ype, v:t@ype) =
   | {ls:agz}{lk:agz}{lv:agz}{lh:agz}{n:pos | n <= 65536}{c:nat | c <= n}
     fdict_mk(k, v) of (
-      $A.arr(int, ls, n),
+      $A.arr(byte, ls, n),
       $A.arr(k, lk, n),
       $A.frozen(v, lv, n, 1),
       $A.borrow(v, lv, n),
@@ -108,41 +111,65 @@ implement _next (s, n) = if s + 1 < n then s + 1 else 0
 
 implement _start_slot (h, n) = if h >= 0 then nmod(h, n) else nmod(~(h + 1), n)
 
-(* The slot holding key, or ~1. Visits each slot at most once: the
-   step count f bounds the search; an EMPTY slot ends it. *)
+(* The states are stored one byte a slot, written by _state_set and read
+   by _state_at only: 0 (what alloc gives) is empty, 1 used, 2 removed *)
+#pub fn _state_at {ls:agz}{n:pos}{i:nat | i < n} (states: !$A.arr(byte, ls, n), i: int i): slot_state
+
+implement _state_at (states, i) = let
+  val code = byte2int0($A.get<byte>(states, i))
+in
+  if code = 1 then Used()
+  else if code = 2 then Removed()
+  else Empty()
+end
+
+#pub fn _state_set {ls:agz}{n:pos}{i:nat | i < n} (states: !$A.arr(byte, ls, n), i: int i, state: slot_state): void
+
+implement _state_set (states, i, state) =
+  $A.set<byte>(states, i, (case+ state of
+    | Empty() => $A.int2byte(0)
+    | Used() => $A.int2byte(1)
+    | Removed() => $A.int2byte(2)): byte)
+
+(* A slot of a table of n *)
+#pub typedef slot_index(n:int) = [r:nat | r < n] int r
+
+(* The slot holding key, if one does. Visits each slot at most once: the
+   step count f bounds the search; an empty slot ends it. *)
 fun{k:t@ype} _probe
   {ls:agz}{lk:agz}{lh:agz}{n:pos}{s:nat | s < n}{f:nat} .<f>.
-  (states: !$A.arr(int, ls, n),
+  (states: !$A.arr(byte, ls, n),
    keys: !$A.arr(k, lk, n),
    hashes: !$A.arr(int, lh, n),
    key: k, h: int, n: int n,
-   s: int s, f: int f): [r:int | ~1 <= r; r < n] int r =
-  if f <= 0 then ~1
-  else let
-    val st = $A.get<int>(states, s)
-  in
-    if st = EMPTY then ~1
-    else if st = USED then
+   s: int s, f: int f): $R.option(slot_index(n)) =
+  if f <= 0 then $R.none()
+  else
+    case+ _state_at(states, s) of
+    | Empty() => $R.none()
+    | Used() =>
       (if $A.get<int>(hashes, s) = h then
-         (if equal_key<k>($A.get<k>(keys, s), key) then s
+         (if equal_key<k>($A.get<k>(keys, s), key) then $R.some(s)
           else _probe<k>(states, keys, hashes, key, h, n, _next(s, n), f - 1))
        else _probe<k>(states, keys, hashes, key, h, n, _next(s, n), f - 1))
-    else _probe<k>(states, keys, hashes, key, h, n, _next(s, n), f - 1)
-  end
+    | Removed() => _probe<k>(states, keys, hashes, key, h, n, _next(s, n), f - 1)
 
-(* First EMPTY or REMOVED slot from s, or ~1 if every slot is used. *)
+(* The first empty or removed slot from s, if every slot is not used. *)
 #pub fn _free_slot
   {ls:agz}{n:pos}{s:nat | s < n}
-  (states: !$A.arr(int, ls, n), n: int n, s: int s)
-  : [r:int | ~1 <= r; r < n] int r
+  (states: !$A.arr(byte, ls, n), n: int n, s: int s)
+  : $R.option(slot_index(n))
 
 implement _free_slot {ls}{n}{s} (states, n, s) = let
   fun loop {t:nat | t < n}{f:nat} .<f>.
-    (states: !$A.arr(int, ls, n), n: int n, t: int t, f: int f)
-    : [r:int | ~1 <= r; r < n] int r =
-    if f <= 0 then ~1
-    else if $A.get<int>(states, t) = USED then loop(states, n, _next(t, n), f - 1)
-    else t
+    (states: !$A.arr(byte, ls, n), n: int n, t: int t, f: int f)
+    : $R.option(slot_index(n)) =
+    if f <= 0 then $R.none()
+    else
+      case+ _state_at(states, t) of
+      | Used() => loop(states, n, _next(t, n), f - 1)
+      | Empty() => $R.some(t)
+      | Removed() => $R.some(t)
 in loop(states, n, s, n) end
 
 (* ============================================================
@@ -151,23 +178,18 @@ in loop(states, n, s, n) end
 
 implement{k}{v}
 create{n}(cap) = let
-  val states = $A.alloc<int>(cap)
+  (* every state is empty: alloc's zero bytes *)
+  val states = $A.alloc<byte>(cap)
   val keys = $A.alloc<k>(cap)
   val vals = $A.alloc<v>(cap)
   val hashes = $A.alloc<int>(cap)
-  fun init {ls:agz}{i:nat | i <= n} .<n - i>.
-    (arr: !$A.arr(int, ls, n), i: int i, m: int n): void =
-    if i >= m then ()
-    else let val () = $A.set<int>(arr, i, EMPTY)
-    in init(arr, i + 1, m) end
-  val () = init(states, 0, cap)
 in dict_mk(states, keys, vals, hashes, 0, cap) end
 
 implement{k}{v}
 dict_free(d) = let
   val+ ~dict_mk(states, keys, vals, hashes, _, _) = d
 in
-  $A.free<int>(states);
+  $A.free<byte>(states);
   $A.free<k>(keys);
   $A.free<v>(vals);
   $A.free<int>(hashes)
@@ -185,30 +207,29 @@ insert(d, key, value) = let
   val+ @dict_mk(states, keys, vals, hashes, count, cap) = d
   val h = hash_key<k>(key)
   val start = _start_slot(h, cap)
-  val existing = _probe<k>(states, keys, hashes, key, h, cap, start, cap)
 in
-  if existing >= 0 then let
-    val () = $A.set<v>(vals, existing, value)
-    prval () = fold@(d)
-  in true end
-  else if count >= cap then let
-    prval () = fold@(d)
-  in false end
-  else let
-    val slot = _free_slot(states, cap, start)
-  in
-    if slot < 0 then let
-      prval () = fold@(d)
-    in false end
-    else let
-      val () = $A.set<k>(keys, slot, key)
-      val () = $A.set<v>(vals, slot, value)
-      val () = $A.set<int>(hashes, slot, h)
-      val () = $A.set<int>(states, slot, USED)
-      val () = count := count + 1
+  case+ _probe<k>(states, keys, hashes, key, h, cap, start, cap) of
+  | ~$R.some(existing) => let
+      val () = $A.set<v>(vals, existing, value)
       prval () = fold@(d)
     in true end
-  end
+  | ~$R.none() =>
+    if count >= cap then let
+      prval () = fold@(d)
+    in false end
+    else
+      case+ _free_slot(states, cap, start) of
+      | ~$R.none() => let
+          prval () = fold@(d)
+        in false end
+      | ~$R.some(slot) => let
+          val () = $A.set<k>(keys, slot, key)
+          val () = $A.set<v>(vals, slot, value)
+          val () = $A.set<int>(hashes, slot, h)
+          val () = _state_set(states, slot, Used())
+          val () = count := count + 1
+          prval () = fold@(d)
+        in true end
 end
 
 implement{k}{v}
@@ -216,16 +237,16 @@ remove(d, key) = let
   val+ @dict_mk(states, keys, vals, hashes, count, cap) = d
   val h = hash_key<k>(key)
   val start = _start_slot(h, cap)
-  val found = _probe<k>(states, keys, hashes, key, h, cap, start, cap)
 in
-  if found >= 0 then
-    (if count > 0 then let
-       val () = $A.set<int>(states, found, REMOVED)
-       val () = count := count - 1
-       prval () = fold@(d)
-     in true end
-     else let prval () = fold@(d) in false end)
-  else let prval () = fold@(d) in false end
+  case+ _probe<k>(states, keys, hashes, key, h, cap, start, cap) of
+  | ~$R.some(found) =>
+    if count > 0 then let
+      val () = _state_set(states, found, Removed())
+      val () = count := count - 1
+      prval () = fold@(d)
+    in true end
+    else let prval () = fold@(d) in false end
+  | ~$R.none() => let prval () = fold@(d) in false end
 end
 
 (* freeze: freeze vals, keep one borrow for reads *)
@@ -248,8 +269,9 @@ lookup(d, key) = let
   val+ @fdict_mk(states, keys, _, bv, hashes, _, cap) = d
   val h = hash_key<k>(key)
   val start = _start_slot(h, cap)
-  val idx = _probe<k>(states, keys, hashes, key, h, cap, start, cap)
-  val r = (if idx >= 0 then $R.some($A.read<v>(bv, idx)) else $R.none()): $R.option(v)
+  val r = (case+ _probe<k>(states, keys, hashes, key, h, cap, start, cap) of
+    | ~$R.some(idx) => $R.some($A.read<v>(bv, idx))
+    | ~$R.none() => $R.none()): $R.option(v)
   prval () = fold@(d)
 in r end
 
