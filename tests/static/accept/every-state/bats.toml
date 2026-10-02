@@ -1,0 +1,8 @@
+[package]
+name = "every-state"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"dict" = ""
+"result" = ""

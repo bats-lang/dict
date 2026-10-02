@@ -1,0 +1,8 @@
+[package]
+name = "state-as-int"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"dict" = ""
+"result" = ""
